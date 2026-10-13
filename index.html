@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>XLM Trader — a StickRPG</title>
+<style>
+:root{
+  --bg:#0b0f14; --panel:#131a22; --panel2:#1a232e; --border:#26303c;
+  --text:#d7dee7; --muted:#7d8896; --accent:#58a6ff; --mint:#7ee7c7;
+  --green:#46d369; --red:#f0664d; --yellow:#e3b341;
+  --shadow:0 1px 0 rgba(255,255,255,.03),0 4px 12px rgba(0,0,0,.4);
+}
+*{box-sizing:border-box}
+html,body{
+  margin:0;background:radial-gradient(1200px 600px at 50% -10%,#182533 0%,var(--bg) 60%);
+  color:var(--text);font:14px/1.5 ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+  min-height:100vh;
+}
+#app{max-width:760px;margin:0 auto;padding:16px 12px 80px}
+header{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px}
+h1{font-size:20px;margin:0;letter-spacing:.5px;color:var(--mint)}
+h1 .a{color:var(--accent)}
+.sub{color:var(--muted);font-size:12px}
+.hud{
+  display:grid;grid-template-columns:repeat(4,1fr);gap:8px;background:var(--panel);
+  border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:12px;box-shadow:var(--shadow);
+}
+.cell{display:flex;flex-direction:column;gap:2px}
+.lbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.7px}
+.val{font-size:15px;font-weight:600}
+.pos{color:var(--green)} .neg{color:var(--red)}
+.hpbar{height:4px;background:var(--border);border-radius:2px;overflow:hidden;margin-top:3px}
+.hpfill{height:100%;background:linear-gradient(90deg,var(--green),var(--mint));transition:width .2s}
+.pp{
+  display:flex;align-items:center;gap:12px;background:var(--panel);border:1px solid var(--border);
+  border-radius:8px;padding:10px 12px;margin-bottom:12px;box-shadow:var(--shadow);
+}
+.pm{display:flex;flex-direction:column;min-width:130px}
+.plbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.7px}
+.pval{font-size:18px;font-weight:700;color:var(--accent)}
+.pd{font-size:11px}
+#spark{flex:1;height:40px;max-width:240px}
+.tabs{
+  display:flex;gap:4px;background:var(--panel);border:1px solid var(--border);
+  border-radius:8px;padding:4px;margin-bottom:8px;overflow-x:auto;box-shadow:var(--shadow);
+}
+.tab{
+  flex:1;padding:8px 12px;background:transparent;border:none;color:var(--muted);
+  cursor:pointer;border-radius:6px;font:inherit;font-size:13px;white-space:nowrap;
+  transition:background .15s,color .15s;
+}
+.tab:hover{background:var(--panel2);color:var(--text)}
+.tab.on{background:var(--accent);color:#0b0f14;font-weight:600}
+.actionbar{
+  display:flex;align-items:center;gap:10px;background:var(--panel);border:1px solid var(--border);
+  border-radius:8px;padding:8px 12px;margin-bottom:12px;box-shadow:var(--shadow);
+}
+.hint{font-size:11px;color:var(--muted)}
+main{
+  background:var(--panel);border:1px solid var(--border);border-radius:8px;
+  padding:16px;box-shadow:var(--shadow);min-height:240px;
+}
+h2{margin:0 0 4px;font-size:15px;color:var(--mint)}
+.desc{margin:0 0 14px;color:var(--muted);font-size:12px}
+.card{
+  display:flex;justify-content:space-between;align-items:center;padding:12px;
+  background:var(--panel2);border:1px solid var(--border);border-radius:6px;margin-bottom:8px;
+}
+.card .info{flex:1}
+.card .name{font-weight:600}
+.card .meta{font-size:11px;color:var(--muted);margin-top:2px}
+.btn{
+  padding:8px 14px;background:var(--accent);color:#0b0f14;border:none;border-radius:6px;
+  font:inherit;font-size:13px;font-weight:600;cursor:pointer;transition:transform .1s,opacity .15s;
+}
+.btn:hover:not(:disabled){transform:translateY(-1px)}
+.btn:disabled{opacity:.35;cursor:not-allowed}
+.btn.sec{background:var(--panel2);color:var(--text);border:1px solid var(--border)}
+.btn.dan{background:var(--red);color:#fff}
+.btn.grn{background:var(--green);color:#0b0f14}
+.btn.sm{padding:5px 10px;font-size:12px}
+.field{display:flex;gap:8px;align-items:center;margin-top:12px;flex-wrap:wrap}
+.field label{font-size:12px;color:var(--muted)}
+.field input{
+  flex:1;min-width:100px;padding:8px 10px;background:var(--panel2);border:1px solid var(--border);
+  border-radius:6px;color:var(--text);font:inherit;font-size:14px;
+}
+.field input:focus{outline:none;border-color:var(--accent)}
+.log{
+  margin-top:16px;background:var(--panel);border:1px solid var(--border);border-radius:8px;
+  padding:12px 16px;box-shadow:var(--shadow);
+}
+.log h3{
+  margin:0 0 8px;font-size:12px;color:var(--muted);text-transform:uppercase;
+  letter-spacing:.7px;font-weight:500;
+}
+#loglist{list-style:none;margin:0;padding:0;max-height:180px;overflow-y:auto;font-size:12px;line-height:1.6}
+#loglist li{padding:2px 0;border-bottom:1px dashed rgba(255,255,255,.04)}
+#loglist li:last-child{border-bottom:none}
+.day{color:var(--muted);margin-right:6px}
+.msg.pos{color:var(--green)} .msg.neg{color:var(--red)} .msg.warn{color:var(--yellow)}
+.toast{
+  position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(20px);
+  background:var(--panel2);border:1px solid var(--border);padding:10px 16px;border-radius:8px;
+  font-size:13px;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;z-index:100;
+  box-shadow:var(--shadow);
+}
+.toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+.toast.pos{border-color:var(--green);color:var(--green)}
+.toast.neg{border-color:var(--red);color:var(--red)}
+pre.dump{font-size:11px;color:var(--muted);white-space:pre-wrap;word-break:break-all;margin-top:14px}
+@media (max-width:480px){
+  .hud{grid-template-columns:repeat(2,1fr)}
+  .pp{flex-wrap:wrap}
+  #spark{width:100%;max-width:none}
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>XLM <span class="a">Trader</span></h1>
+    <span class="sub">a StickRPG</span>
+  </header>
+
+  <div class="hud" id="hud"></div>
+
+  <div class="pp">
+    <div class="pm">
+      <span class="plbl">XLM / USD (live)</span>
+      <span class="pval" id="pval">—</span>
+      <span class="pd" id="pd">loading…</span>
+    </div>
+    <canvas id="spark" width="240" height="40"></canvas>
+    <button class="btn sec sm" id="refprice" title="Refresh">↻</button>
+  </div>
+
+  <nav class="tabs" id="tabs"></nav>
+
+  <div class="actionbar">
+    <button class="btn grn" id="nextday">Next Day ▶</button>
+    <span class="hint">advances the market · or press N</span>
+  </div>
+
+  <main id="main"></main>
+
+  <section class="log">
+    <h3>Log</h3>
+    <ul id="loglist"></ul>
+  </section>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(()=>{
+'use strict';
+
+// -- constants ---------------------------------------------------------------
+const SAVE='xlm-trader-v1', PCACHE='xlm-trader-price-v1', TTL=5*60*1000;
+
+const JOBS=[
+  {id:'barista',name:'Barista',      stat:'cha',base: 40,variance: 20,hp: 5,min: 0},
+  {id:'coder',  name:'Coder',        stat:'int',base: 90,variance: 40,hp: 8,min: 8},
+  {id:'trader', name:'Junior Trader',stat:'int',base:180,variance: 80,hp:12,min:15},
+  {id:'closer', name:'Sales Closer', stat:'cha',base:260,variance:120,hp:15,min:20},
+];
+const UPGRADES=[
+  {stat:'str',name:'Strength',    growth:1.55},
+  {stat:'int',name:'Intelligence',growth:1.55},
+  {stat:'cha',name:'Charisma',    growth:1.55},
+];
+const TABS=[
+  {id:'trade', label:'Trade'},
+  {id:'work',  label:'Work'},
+  {id:'shop',  label:'Shop'},
+  {id:'fight', label:'Fight'},
+  {id:'sys',   label:'System'},
+];
+
+// -- state -------------------------------------------------------------------
+function blank(){return{
+  day:1,hp:100,maxHp:100,cash:500,
+  stats:{str:5,int:5,cha:5},upgradeCosts:{str:150,int:150,cha:150},
+  holdings:0,costBasis:0,realizedPnl:0,
+  muPrice:10,muHistory:[10],
+  xlmPrice:null,xlmHistory:[],xlmAtLastDay:null,
+  log:[],activeTab:'trade',lastFightDay:0,
+};}
+function load(){
+  try{const r=localStorage.getItem(SAVE);return r?Object.assign(blank(),JSON.parse(r)):blank();}
+  catch(e){console.warn('load failed',e);return blank();}
+}
+function persist(){try{localStorage.setItem(SAVE,JSON.stringify(state));}catch(e){}}
+let state=load();
+
+// -- formatting --------------------------------------------------------------
+function cash(n){
+  const s=n<0?'-':'';const a=Math.abs(n);
+  if(a>=1e6)return s+(a/1e6).toFixed(2)+'M';
+  if(a>=1e4)return s+(a/1e3).toFixed(1)+'k';
+  return s+Math.round(a);
+}
+function price(n){
+  if(n==null)return '—';
+  if(n>=1)return n.toFixed(4);
+  if(n>=.01)return n.toFixed(5);
+  return n.toFixed(6);
+}
+function pct(n){return !isFinite(n)?'—':(n>=0?'+':'')+(n*100).toFixed(2)+'%';}
+function esc(s){return s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+
+// -- log ---------------------------------------------------------------------
+function log(msg,kind){
+  state.log.unshift({day:state.day,msg,kind:kind||'',t:Date.now()});
+  if(state.log.length>80)state.log.length=80;
+}
+
+// -- price -------------------------------------------------------------------
+async function fetchPrice(){
+  try{
+    const r=localStorage.getItem(PCACHE);
+    if(r){const c=JSON.parse(r);
+      if(c&&Date.now()-c.fetchedAt<TTL&&c.series?.length)return c;}
+  }catch(e){}
+  try{
+    const url='https://api.coingecko.com/api/v3/coins/stellar/market_chart?vs_currency=usd&days=1';
+    const res=await fetch(url,{headers:{accept:'application/json'}});
+    if(!res.ok)throw new Error('HTTP '+res.status);
+    const d=await res.json();
+    const prices=(d.prices||[]).map(p=>p[1]).filter(Number.isFinite);
+    if(!prices.length)throw new Error('empty');
+    const out={current:prices[prices.length-1],series:prices,fetchedAt:Date.now(),source:'coingecko'};
+    try{localStorage.setItem(PCACHE,JSON.stringify(out));}catch(e){}
+    return out;
+  }catch(e){console.warn('live fetch failed',e);}
+  // fallback: simulated
+  let p=state.xlmPrice||0.30;const series=[];
+  for(let i=0;i<48;i++){p*=1+(Math.random()-.5)*.02;series.push(p);}
+  return{current:p,series,fetchedAt:Date.now(),source:'simulated'};
+}
+async function refreshPrice(show){
+  try{
+    const d=await fetchPrice();
+    state.xlmPrice=d.current;
+    state.xlmHistory=d.series.slice(-48);
+    if(state.xlmAtLastDay==null)state.xlmAtLastDay=d.current;
+    persist();render();
+    if(show)toast(d.source==='coingecko'?'Price refreshed':'Live fetch failed — using simulated price',
+                  d.source==='coingecko'?'pos':'warn');
+  }catch(e){console.warn(e);}
+}
+
+// -- actions -----------------------------------------------------------------
+function buyMu(amt){
+  if(!(amt>0)||amt>state.cash)return;
+  const units=amt/state.muPrice;
+  state.holdings+=units;state.costBasis+=amt;state.cash-=amt;
+  log(`Bought ${units.toFixed(4)} μXLM for ${cash(amt)}`,'');
+  persist();render();
+}
+function sellMu(units){
+  if(!(units>0)||units>state.holdings)return;
+  const proceeds=units*state.muPrice;
+  const basisPer=state.costBasis/state.holdings;
+  const basisSold=basisPer*units;
+  const pnl=proceeds-basisSold;
+  state.realizedPnl+=pnl;
+  state.holdings-=units;state.costBasis-=basisSold;state.cash+=proceeds;
+  log(`Sold ${units.toFixed(4)} μXLM for ${cash(proceeds)} (${pnl>=0?'+':''}${cash(pnl)})`,pnl>=0?'pos':'neg');
+  persist();render();
+}
+function work(job){
+  if(state.hp<job.hp){toast('Not enough HP','neg');return;}
+  const sv=state.stats[job.stat];
+  if(sv<job.min){toast(`Requires ${job.min} ${job.stat.toUpperCase()}`,'neg');return;}
+  const mult=1+(sv-job.min)*0.05;
+  const pay=Math.round((job.base+Math.random()*job.variance)*mult);
+  state.cash+=pay;state.hp-=job.hp;
+  log(`Worked as ${job.name}: +${cash(pay)} (${job.hp} HP)`,'pos');
+  if(state.hp<=0){state.hp=0;log('You collapsed from exhaustion.','neg');}
+  persist();render();
+}
+function buyUp(u){
+  const c=state.upgradeCosts[u.stat];
+  if(state.cash<c){toast('Not enough cash','neg');return;}
+  state.cash-=c;state.stats[u.stat]+=1;
+  state.upgradeCosts[u.stat]=Math.round(c*u.growth);
+  log(`Upgraded ${u.name} to ${state.stats[u.stat]} for ${cash(c)}`,'');
+  persist();render();
+}
+function rest(){
+  if(state.cash<20){toast('Not enough cash','neg');return;}
+  if(state.hp>=state.maxHp){toast('Already at full HP','warn');return;}
+  state.cash-=20;state.hp=Math.min(state.maxHp,state.hp+25);
+  log('Rested: +25 HP for 20 cash','');
+  persist();render();
+}
+function fight(){
+  if(state.lastFightDay===state.day){toast('You already fought today','warn');return;}
+  const eStr=5+Math.floor(state.day*.7)+Math.floor(Math.random()*6);
+  const myR=state.stats.str+Math.floor(Math.random()*8);
+  const thR=eStr+Math.floor(Math.random()*8);
+  state.lastFightDay=state.day;
+  if(myR>thR){
+    const rw=30+eStr*8+Math.floor(Math.random()*40);
+    state.cash+=rw;state.hp=Math.max(0,state.hp-Math.floor(eStr*.6));
+    log(`Beat a thug (str ${eStr}): +${cash(rw)}`,'pos');
+  }else if(myR===thR){
+    log(`Fought a thug (str ${eStr}) to a draw.`,'warn');
+  }else{
+    const dmg=Math.floor(eStr*.9);const loss=Math.floor(state.cash*.05);
+    state.hp=Math.max(0,state.hp-dmg);state.cash-=loss;
+    log(`Lost to a thug (str ${eStr}): -${dmg} HP, -${cash(loss)}`,'neg');
+  }
+  persist();render();
+}
+function nextDay(){
+  state.day+=1;
+  state.hp=Math.min(state.maxHp,state.hp+20);
+
+  const cur=state.xlmPrice||state.xlmAtLastDay||0.30;
+  const last=state.xlmAtLastDay||cur;
+  let delta=last>0?(cur/last-1):0;
+  delta=Math.max(-.15,Math.min(.15,delta));
+  const noise=(Math.random()-.5)*.04;
+  const total=delta+noise;
+
+  const before=state.muPrice;
+  state.muPrice=Math.max(.01,state.muPrice*(1+total));
+  state.xlmAtLastDay=cur;
+  state.muHistory.push(state.muPrice);
+  if(state.muHistory.length>200)state.muHistory.shift();
+
+  const p=state.muPrice/before-1;
+  log(`Day ${state.day}. μXLM ${p>=0?'+':''}${(p*100).toFixed(2)}% → ${price(state.muPrice)}`,p>=0?'pos':'neg');
+
+  if(state.day%5===0){
+    const evs=[
+      {msg:'A street vendor gives you a free meal.',k:'pos',hp:5},
+      {msg:'You find a crumpled bill on the sidewalk.',k:'pos',cash:25},
+      {msg:'Your landlord raises rent.',k:'neg',cash:-40},
+      {msg:'A friend tips you for advice.',k:'pos',cash:60},
+      {msg:'You stub your toe on the way home.',k:'neg',hp:-5},
+    ];
+    const e=evs[Math.floor(Math.random()*evs.length)];
+    if(e.hp)state.hp=Math.max(0,Math.min(state.maxHp,state.hp+e.hp));
+    if(e.cash)state.cash=Math.max(0,state.cash+e.cash);
+    log(e.msg,e.k);
+  }
+  persist();render();
+  refreshPrice(false);
+}
+function resetGame(){
+  if(!confirm('Reset the game? This deletes your save.'))return;
+  try{localStorage.removeItem(SAVE);}catch(e){}
+  state=blank();log('New game.','warn');persist();refreshPrice(false);render();
+}
+
+// -- toast -------------------------------------------------------------------
+let tTimer=null;
+function toast(msg,kind){
+  const el=document.getElementById('toast');
+  el.textContent=msg;el.className='toast on '+(kind||'');
+  clearTimeout(tTimer);
+  tTimer=setTimeout(()=>{el.className='toast '+(kind||'');},1800);
+}
+
+// -- rendering ---------------------------------------------------------------
+function rHud(){
+  const p=Math.max(0,Math.min(100,state.hp/state.maxHp*100));
+  const pv=state.holdings*state.muPrice;
+  const u=pv-state.costBasis;
+  const cls=u>0?'pos':u<0?'neg':'';
+  document.getElementById('hud').innerHTML=`
+    <div class="cell"><span class="lbl">Day</span><span class="val">${state.day}</span></div>
+    <div class="cell"><span class="lbl">Cash</span><span class="val">${cash(state.cash)}</span></div>
+    <div class="cell"><span class="lbl">HP ${state.hp}/${state.maxHp}</span>
+      <span class="val"></span><div class="hpbar"><div class="hpfill" style="width:${p}%"></div></div></div>
+    <div class="cell"><span class="lbl">μXLM P&L</span><span class="val ${cls}">${u>=0?'+':''}${cash(u)}</span></div>`;
+}
+function rPrice(){
+  const pv=document.getElementById('pval'),pd=document.getElementById('pd'),s=state.xlmHistory;
+  pv.textContent=state.xlmPrice!=null?'$'+price(state.xlmPrice):'—';
+  if(s.length>=2){
+    const d=s[s.length-1]/s[0]-1;
+    pd.textContent='24h '+pct(d);
+    pd.className='pd '+(d>=0?'pos':'neg');
+  }else{pd.textContent='loading…';pd.className='pd';}
+  drawSpark(s);
+}
+function drawSpark(s){
+  const c=document.getElementById('spark'),ctx=c.getContext('2d');
+  const w=c.width,h=c.height;ctx.clearRect(0,0,w,h);
+  if(!s||s.length<2)return;
+  const mn=Math.min(...s),mx=Math.max(...s),r=mx-mn||1,st=w/(s.length-1);
+  const up=s[s.length-1]>=s[0],col=up?'#46d369':'#f0664d';
+  ctx.beginPath();ctx.moveTo(0,h);
+  for(let i=0;i<s.length;i++){ctx.lineTo(i*st,h-((s[i]-mn)/r)*(h-4)-2);}
+  ctx.lineTo(w,h);ctx.closePath();
+  ctx.fillStyle=up?'rgba(70,211,105,.12)':'rgba(240,102,77,.12)';ctx.fill();
+  ctx.beginPath();
+  for(let i=0;i<s.length;i++){
+    const x=i*st,y=h-((s[i]-mn)/r)*(h-4)-2;
+    i?ctx.lineTo(x,y):ctx.moveTo(x,y);
+  }
+  ctx.strokeStyle=col;ctx.lineWidth=1.5;ctx.stroke();
+}
+function rTabs(){
+  const t=document.getElementById('tabs');t.innerHTML='';
+  TABS.forEach(x=>{
+    const b=document.createElement('button');
+    b.className='tab'+(state.activeTab===x.id?' on':'');
+    b.textContent=x.label;
+    b.onclick=()=>{state.activeTab=x.id;persist();render();};
+    t.appendChild(b);
+  });
+}
+function rMain(){
+  const m=document.getElementById('main');m.innerHTML='';
+  ({trade:rTrade,work:rWork,shop:rShop,fight:rFight,sys:rSys}[state.activeTab]||rTrade)(m);
+}
+function rTrade(m){
+  const pv=state.holdings*state.muPrice;
+  const u=pv-state.costBasis;
+  const up=state.costBasis>0?u/state.costBasis:0;
+  m.innerHTML=`
+    <h2>Trade μXLM</h2>
+    <p class="desc">μXLM is a fictional in-game token whose price tracks the live XLM/USD
+    market with a small random drift. Game cash and real XLM are entirely separate —
+    nothing here touches a wallet or a chain.</p>
+    <div class="card"><div class="info"><div class="name">μXLM price</div>
+      <div class="meta">1 μXLM = ${price(state.muPrice)} game units</div></div>
+      <div class="val">${price(state.muPrice)}</div></div>
+    <div class="card"><div class="info"><div class="name">Your holdings</div>
+      <div class="meta">${state.holdings.toFixed(4)} μXLM · cost basis ${cash(state.costBasis)} · value ${cash(pv)}</div></div>
+      <div class="val ${u>=0?'pos':'neg'}">${u>=0?'+':''}${cash(u)}
+        <span style="font-size:11px;opacity:.7">(${pct(up)})</span></div></div>
+    <div class="field"><label>Buy with</label>
+      <input id="ba" type="number" placeholder="game cash" min="1" step="1">
+      <button class="btn grn" id="b25">25%</button>
+      <button class="btn grn" id="b50">50%</button>
+      <button class="btn grn" id="bmx">Max</button>
+      <button class="btn" id="bgo">Buy</button></div>
+    <div class="field"><label>Sell units</label>
+      <input id="sa" type="number" placeholder="μXLM" min="0" step="0.0001">
+      <button class="btn dan" id="shf">50%</button>
+      <button class="btn dan" id="sal">All</button>
+      <button class="btn" id="sgo">Sell</button></div>
+    <p class="desc" style="margin-top:14px">Realized P&L this save:
+      <span style="color:${state.realizedPnl>=0?'var(--green)':'var(--red)'}">
+        ${state.realizedPnl>=0?'+':''}${cash(state.realizedPnl)}</span></p>`;
+  const bi=m.querySelector('#ba'),si=m.querySelector('#sa');
+  m.querySelector('#b25').onclick=()=>bi.value=Math.floor(state.cash*.25);
+  m.querySelector('#b50').onclick=()=>bi.value=Math.floor(state.cash*.5);
+  m.querySelector('#bmx').onclick=()=>bi.value=Math.floor(state.cash);
+  m.querySelector('#bgo').onclick=()=>{
+    const v=parseFloat(bi.value);
+    if(!(v>0)){toast('Enter a positive amount','neg');return;}
+    if(v>state.cash){toast('Not enough cash','neg');return;}
+    buyMu(v);
+  };
+  m.querySelector('#shf').onclick=()=>si.value=(state.holdings/2).toFixed(4);
+  m.querySelector('#sal').onclick=()=>si.value=state.holdings.toFixed(4);
+  m.querySelector('#sgo').onclick=()=>{
+    const v=parseFloat(si.value);
+    if(!(v>0)){toast('Enter a positive amount','neg');return;}
+    if(v>state.holdings){toast('Not enough μXLM','neg');return;}
+    sellMu(v);
+  };
+}
+function rWork(m){
+  m.innerHTML=`<h2>Work</h2><p class="desc">Trade HP for game cash. Stats multiply your pay.</p><div id="jobs"></div>`;
+  const el=m.querySelector('#jobs');
+  JOBS.forEach(j=>{
+    const sv=state.stats[j.stat];
+    const ok=sv>=j.min&&state.hp>=j.hp;
+    const c=document.createElement('div');c.className='card';
+    c.innerHTML=`<div class="info"><div class="name">${j.name}</div>
+      <div class="meta">needs ${j.min}+ ${j.stat.toUpperCase()} (you: ${sv}) · ${j.hp} HP ·
+      pays ${cash(j.base)}–${cash(j.base+j.variance)}</div></div>`;
+    const b=document.createElement('button');b.className='btn';b.textContent='Work';
+    b.disabled=!ok;b.onclick=()=>work(j);c.appendChild(b);el.appendChild(c);
+  });
+}
+function rShop(m){
+  m.innerHTML=`<h2>Shop</h2><p class="desc">Permanent stat upgrades. Prices scale with each level.</p>
+    <div id="ups"></div>
+    <div class="field"><button class="btn sec" id="rest">Rest (+25 HP for 20 cash)</button></div>`;
+  const el=m.querySelector('#ups');
+  UPGRADES.forEach(u=>{
+    const c=state.upgradeCosts[u.stat];
+    const card=document.createElement('div');card.className='card';
+    card.innerHTML=`<div class="info"><div class="name">${u.name}</div>
+      <div class="meta">current: ${state.stats[u.stat]} · cost: ${cash(c)}</div></div>`;
+    const b=document.createElement('button');b.className='btn';b.textContent='Buy';
+    b.disabled=state.cash<c;b.onclick=()=>buyUp(u);card.appendChild(b);el.appendChild(card);
+  });
+  m.querySelector('#rest').onclick=rest;
+}
+function rFight(m){
+  const done=state.lastFightDay===state.day;
+  const e=5+Math.floor(state.day*.7);
+  m.innerHTML=`<h2>Fight Club</h2>
+    <p class="desc">Win for cash, lose HP and a bit of cash. One fight per day. Enemies scale with the day.</p>
+    <div class="card"><div class="info"><div class="name">Today's thug</div>
+      <div class="meta">estimated strength ~${e} · your strength: ${state.stats.str}</div></div></div>
+    <div class="field"><button class="btn dan" id="fb" ${done?'disabled':''}>
+      ${done?'Already fought today':'Fight'}</button></div>`;
+  m.querySelector('#fb').onclick=fight;
+}
+function rSys(m){
+  m.innerHTML=`<h2>System</h2><p class="desc">Save state, advance time, reset.</p>
+    <div class="field"><button class="btn grn" id="nd">Next Day ▶</button>
+      <button class="btn sec" id="rf">Refresh price</button>
+      <button class="btn dan" id="rs">Reset save</button></div>
+    <pre class="dump">${esc(JSON.stringify({
+      day:state.day,hp:state.hp,cash:state.cash,stats:state.stats,
+      holdings:state.holdings,costBasis:state.costBasis,muPrice:state.muPrice,
+      xlmPrice:state.xlmPrice,realizedPnl:state.realizedPnl},null,2))}</pre>`;
+  m.querySelector('#nd').onclick=nextDay;
+  m.querySelector('#rf').onclick=()=>refreshPrice(true);
+  m.querySelector('#rs').onclick=resetGame;
+}
+function rLog(){
+  const el=document.getElementById('loglist');el.innerHTML='';
+  if(!state.log.length){el.innerHTML='<li style="color:var(--muted);font-style:italic">No entries yet.</li>';return;}
+  state.log.forEach(e=>{
+    const li=document.createElement('li');
+    li.innerHTML=`<span class="day">D${e.day}</span><span class="msg ${e.kind}">${esc(e.msg)}</span>`;
+    el.appendChild(li);
+  });
+}
+function render(){rHud();rPrice();rTabs();rMain();rLog();}
+
+// -- boot --------------------------------------------------------------------
+document.getElementById('refprice').onclick=()=>refreshPrice(true);
+document.getElementById('nextday').onclick=nextDay;
+document.addEventListener('keydown',e=>{
+  if(e.target.tagName==='INPUT')return;
+  if(e.key==='n'||e.key==='N')nextDay();
+});
+render();
+refreshPrice(false);
+setInterval(()=>refreshPrice(false),TTL);
+})();
+</script>
+</body>
+</html>
