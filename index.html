@@ -173,6 +173,7 @@ const UPGRADES=[
 ];
 const TABS=[
   {id:'trade', label:'Trade'},
+  {id:'cross', label:'Cross'},
   {id:'work',  label:'Work'},
   {id:'shop',  label:'Shop'},
   {id:'fight', label:'Fight'},
@@ -184,8 +185,11 @@ function blank(){return{
   day:1,hp:100,maxHp:100,cash:500,
   stats:{str:5,int:5,cha:5},upgradeCosts:{str:150,int:150,cha:150},
   holdings:0,costBasis:0,realizedPnl:0,
+  holdingsXrp:0,costBasisXrp:0,realizedPnlXrp:0,
   muPrice:10,muHistory:[10],
+  muXrpPrice:1.5,muXrpHistory:[1.5],
   xlmPrice:null,xlmHistory:[],xlmAtLastDay:null,
+  xrpPrice:null,xrpHistory:[],xrpAtLastDay:null,
   log:[],activeTab:'trade',lastFightDay:0,
 };}
 function load(){
@@ -222,32 +226,38 @@ async function fetchPrice(){
   try{
     const r=localStorage.getItem(PCACHE);
     if(r){const c=JSON.parse(r);
-      if(c&&Date.now()-c.fetchedAt<TTL&&c.series?.length)return c;}
+      if(c&&Date.now()-c.fetchedAt<TTL&&c.xlm?.series?.length&&c.xrp?.series?.length)return c;}
   }catch(e){}
   try{
-    const url='https://api.coingecko.com/api/v3/coins/stellar/market_chart?vs_currency=usd&days=1';
-    const res=await fetch(url,{headers:{accept:'application/json'}});
-    if(!res.ok)throw new Error('HTTP '+res.status);
-    const d=await res.json();
-    const prices=(d.prices||[]).map(p=>p[1]).filter(Number.isFinite);
-    if(!prices.length)throw new Error('empty');
-    const out={current:prices[prices.length-1],series:prices,fetchedAt:Date.now(),source:'coingecko'};
+    const qs='?vs_currency=usd&days=1', base='https://api.coingecko.com/api/v3/coins/';
+    const [r1,r2]=await Promise.all([
+      fetch(base+'stellar/market_chart'+qs,{headers:{accept:'application/json'}}),
+      fetch(base+'ripple/market_chart'+qs,{headers:{accept:'application/json'}}),
+    ]);
+    if(!r1.ok||!r2.ok)throw new Error('HTTP');
+    const [d1,d2]=await Promise.all([r1.json(),r2.json()]);
+    const pick=d=>(d.prices||[]).map(p=>p[1]).filter(Number.isFinite);
+    const xs=pick(d1),rs=pick(d2);
+    if(!xs.length||!rs.length)throw new Error('empty');
+    const out={xlm:{current:xs[xs.length-1],series:xs},xrp:{current:rs[rs.length-1],series:rs},
+               fetchedAt:Date.now(),source:'coingecko'};
     try{localStorage.setItem(PCACHE,JSON.stringify(out));}catch(e){}
     return out;
   }catch(e){console.warn('live fetch failed',e);}
-  // fallback: simulated
-  let p=state.xlmPrice||0.30;const series=[];
-  for(let i=0;i<48;i++){p*=1+(Math.random()-.5)*.02;series.push(p);}
-  return{current:p,series,fetchedAt:Date.now(),source:'simulated'};
+  const sim=(seed)=>{let p=seed;const s=[];for(let i=0;i<48;i++){p*=1+(Math.random()-.5)*.02;s.push(p);}return s;};
+  const xs=sim(state.xlmPrice||0.30),rs=sim(state.xrpPrice||0.55);
+  return{xlm:{current:xs[xs.length-1],series:xs},xrp:{current:rs[rs.length-1],series:rs},
+         fetchedAt:Date.now(),source:'simulated'};
 }
 async function refreshPrice(show){
   try{
     const d=await fetchPrice();
-    state.xlmPrice=d.current;
-    state.xlmHistory=d.series.slice(-48);
-    if(state.xlmAtLastDay==null)state.xlmAtLastDay=d.current;
+    state.xlmPrice=d.xlm.current;state.xlmHistory=d.xlm.series.slice(-48);
+    state.xrpPrice=d.xrp.current;state.xrpHistory=d.xrp.series.slice(-48);
+    if(state.xlmAtLastDay==null)state.xlmAtLastDay=d.xlm.current;
+    if(state.xrpAtLastDay==null)state.xrpAtLastDay=d.xrp.current;
     persist();render();
-    if(show)toast(d.source==='coingecko'?'Price refreshed':'Live fetch failed — using simulated price',
+    if(show)toast(d.source==='coingecko'?'Prices refreshed':'Live fetch failed — simulated prices',
                   d.source==='coingecko'?'pos':'warn');
   }catch(e){console.warn(e);}
 }
@@ -269,6 +279,28 @@ function sellMu(units){
   state.realizedPnl+=pnl;
   state.holdings-=units;state.costBasis-=basisSold;state.cash+=proceeds;
   log(`Sold ${units.toFixed(4)} μXLM for ${cash(proceeds)} (${pnl>=0?'+':''}${cash(pnl)})`,pnl>=0?'pos':'neg');
+  persist();render();
+}
+function swapMu(dir,units){
+  const sp=0.005;
+  if(!(units>0))return;
+  if(dir==='xlm2xrp'){
+    if(units>state.holdings){toast('Not enough μXLM','neg');return;}
+    const give=units*state.muPrice, get=(give*(1-sp))/state.muXrpPrice;
+    const bp=state.holdings>0?state.costBasis/state.holdings:0;
+    state.realizedPnl+=give-bp*units-give*sp;
+    state.holdings-=units;state.costBasis-=bp*units;
+    state.holdingsXrp+=get;state.costBasisXrp+=give;
+    log(`Swapped ${units.toFixed(4)} μXLM → ${get.toFixed(4)} μXRP`,'');
+  }else{
+    if(units>state.holdingsXrp){toast('Not enough μXRP','neg');return;}
+    const give=units*state.muXrpPrice, get=(give*(1-sp))/state.muPrice;
+    const bp=state.holdingsXrp>0?state.costBasisXrp/state.holdingsXrp:0;
+    state.realizedPnlXrp+=give-bp*units-give*sp;
+    state.holdingsXrp-=units;state.costBasisXrp-=bp*units;
+    state.holdings+=get;state.costBasis+=give;
+    log(`Swapped ${units.toFixed(4)} μXRP → ${get.toFixed(4)} μXLM`,'');
+  }
   persist();render();
 }
 function work(job){
@@ -317,25 +349,26 @@ function fight(){
   }
   persist();render();
 }
+function driftPrice(realCur,realLast,muPrev){
+  let d=realLast>0?(realCur/realLast-1):0;
+  d=Math.max(-.15,Math.min(.15,d));
+  return Math.max(.0001,muPrev*(1+d+(Math.random()-.5)*.04));
+}
 function nextDay(){
   state.day+=1;
   state.hp=Math.min(state.maxHp,state.hp+20);
 
-  const cur=state.xlmPrice||state.xlmAtLastDay||0.30;
-  const last=state.xlmAtLastDay||cur;
-  let delta=last>0?(cur/last-1):0;
-  delta=Math.max(-.15,Math.min(.15,delta));
-  const noise=(Math.random()-.5)*.04;
-  const total=delta+noise;
+  const cX=state.xlmPrice??state.xlmAtLastDay??0.30, lX=state.xlmAtLastDay??cX;
+  const cR=state.xrpPrice??state.xrpAtLastDay??0.55, lR=state.xrpAtLastDay??cR;
+  const bX=state.muPrice, bR=state.muXrpPrice;
+  state.muPrice=driftPrice(cX,lX,bX);
+  state.muXrpPrice=driftPrice(cR,lR,bR);
+  state.xlmAtLastDay=cX;state.xrpAtLastDay=cR;
+  state.muHistory.push(state.muPrice);if(state.muHistory.length>200)state.muHistory.shift();
+  state.muXrpHistory.push(state.muXrpPrice);if(state.muXrpHistory.length>200)state.muXrpHistory.shift();
 
-  const before=state.muPrice;
-  state.muPrice=Math.max(.01,state.muPrice*(1+total));
-  state.xlmAtLastDay=cur;
-  state.muHistory.push(state.muPrice);
-  if(state.muHistory.length>200)state.muHistory.shift();
-
-  const p=state.muPrice/before-1;
-  log(`Day ${state.day}. μXLM ${p>=0?'+':''}${(p*100).toFixed(2)}% → ${price(state.muPrice)}`,p>=0?'pos':'neg');
+  const pX=state.muPrice/bX-1, pR=state.muXrpPrice/bR-1;
+  log(`Day ${state.day}. μXLM ${pX>=0?'+':''}${(pX*100).toFixed(2)}% → ${price(state.muPrice)} · μXRP ${pR>=0?'+':''}${(pR*100).toFixed(2)}% → ${price(state.muXrpPrice)}`,(pX+pR)>=0?'pos':'neg');
 
   if(state.day%5===0){
     const evs=[
@@ -371,22 +404,22 @@ function toast(msg,kind){
 // -- rendering ---------------------------------------------------------------
 function rHud(){
   const p=Math.max(0,Math.min(100,state.hp/state.maxHp*100));
-  const pv=state.holdings*state.muPrice;
-  const u=pv-state.costBasis;
+  const u=(state.holdings*state.muPrice-state.costBasis)+(state.holdingsXrp*state.muXrpPrice-state.costBasisXrp);
   const cls=u>0?'pos':u<0?'neg':'';
   document.getElementById('hud').innerHTML=`
     <div class="cell"><span class="lbl">Day</span><span class="val">${state.day}</span></div>
     <div class="cell"><span class="lbl">Cash</span><span class="val">${cash(state.cash)}</span></div>
     <div class="cell"><span class="lbl">HP ${state.hp}/${state.maxHp}</span>
       <span class="val"></span><div class="hpbar"><div class="hpfill" style="width:${p}%"></div></div></div>
-    <div class="cell"><span class="lbl">μXLM P&L</span><span class="val ${cls}">${u>=0?'+':''}${cash(u)}</span></div>`;
+    <div class="cell"><span class="lbl">Total P&L</span><span class="val ${cls}">${u>=0?'+':''}${cash(u)}</span></div>`;
 }
 function rPrice(){
   const pv=document.getElementById('pval'),pd=document.getElementById('pd'),s=state.xlmHistory;
   pv.textContent=state.xlmPrice!=null?'$'+price(state.xlmPrice):'—';
+  const rr=(state.xrpPrice&&state.xlmPrice)?state.xrpPrice/state.xlmPrice:null;
   if(s.length>=2){
     const d=s[s.length-1]/s[0]-1;
-    pd.textContent='24h '+pct(d);
+    pd.textContent='XLM 24h '+pct(d)+(rr!=null?` · XRP/XLM ${price(rr)}`:'');
     pd.className='pd '+(d>=0?'pos':'neg');
   }else{pd.textContent='loading…';pd.className='pd';}
   drawSpark(s);
@@ -420,7 +453,7 @@ function rTabs(){
 }
 function rMain(){
   const m=document.getElementById('main');m.innerHTML='';
-  ({trade:rTrade,work:rWork,shop:rShop,fight:rFight,sys:rSys}[state.activeTab]||rTrade)(m);
+  ({trade:rTrade,cross:rCross,work:rWork,shop:rShop,fight:rFight,sys:rSys}[state.activeTab]||rTrade)(m);
 }
 function rTrade(m){
   const pv=state.holdings*state.muPrice;
@@ -470,6 +503,44 @@ function rTrade(m){
     if(v>state.holdings){toast('Not enough μXLM','neg');return;}
     sellMu(v);
   };
+}
+function rCross(m){
+  const ratio=state.muXrpPrice/state.muPrice;
+  const realRatio=(state.xrpPrice&&state.xlmPrice)?state.xrpPrice/state.xlmPrice:null;
+  const n=Math.min(state.muHistory.length,state.muXrpHistory.length);
+  const hist=[];for(let i=0;i<n;i++)hist.push(state.muXrpHistory[i]/state.muHistory[i]);
+  const rChg=hist.length>1?(hist[hist.length-1]/hist[0]-1):0;
+  const xlmVal=state.holdings*state.muPrice, xrpVal=state.holdingsXrp*state.muXrpPrice;
+  m.innerHTML=`
+    <h2>Cross Market — μXRP / μXLM</h2>
+    <p class="desc">Trade the ratio. Each side tracks its real counterpart (XRP/USD, XLM/USD)
+    with noise. A 0.50% spread applies to each swap. Both tokens are fictional — no real XRP, XLM, or wallets.</p>
+    <div class="card"><div class="info"><div class="name">μXRP / μXLM ratio</div>
+      <div class="meta">real XRP/XLM: ${realRatio!=null?price(realRatio):'—'} · 24h Δ</div></div>
+      <div class="val ${rChg>=0?'pos':'neg'}">${price(ratio)} <span style="font-size:11px;opacity:.7">${pct(rChg)}</span></div></div>
+    <div class="card"><div class="info"><div class="name">μXLM held</div>
+      <div class="meta">${state.holdings.toFixed(4)} units · basis ${cash(state.costBasis)}</div></div>
+      <div class="val">${cash(xlmVal)}</div></div>
+    <div class="card"><div class="info"><div class="name">μXRP held</div>
+      <div class="meta">${state.holdingsXrp.toFixed(4)} units · basis ${cash(state.costBasisXrp)}</div></div>
+      <div class="val">${cash(xrpVal)}</div></div>
+    <div class="field"><label>Swap μXLM → μXRP</label>
+      <input id="cx1" type="number" placeholder="μXLM units" min="0" step="0.0001">
+      <button class="btn" id="cx1h">50%</button>
+      <button class="btn" id="cx1a">All</button>
+      <button class="btn grn" id="cx1g">Swap</button></div>
+    <div class="field"><label>Swap μXRP → μXLM</label>
+      <input id="cx2" type="number" placeholder="μXRP units" min="0" step="0.0001">
+      <button class="btn" id="cx2h">50%</button>
+      <button class="btn" id="cx2a">All</button>
+      <button class="btn grn" id="cx2g">Swap</button></div>`;
+  const i1=m.querySelector('#cx1'), i2=m.querySelector('#cx2');
+  m.querySelector('#cx1h').onclick=()=>i1.value=(state.holdings/2).toFixed(4);
+  m.querySelector('#cx1a').onclick=()=>i1.value=state.holdings.toFixed(4);
+  m.querySelector('#cx1g').onclick=()=>swapMu('xlm2xrp',parseFloat(i1.value)||0);
+  m.querySelector('#cx2h').onclick=()=>i2.value=(state.holdingsXrp/2).toFixed(4);
+  m.querySelector('#cx2a').onclick=()=>i2.value=state.holdingsXrp.toFixed(4);
+  m.querySelector('#cx2g').onclick=()=>swapMu('xrp2xlm',parseFloat(i2.value)||0);
 }
 function rWork(m){
   m.innerHTML=`<h2>Work</h2><p class="desc">Trade HP for game cash. Stats multiply your pay.</p><div id="jobs"></div>`;
