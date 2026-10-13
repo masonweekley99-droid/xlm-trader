@@ -276,7 +276,8 @@ function work(job){
   const sv=state.stats[job.stat];
   if(sv<job.min){toast(`Requires ${job.min} ${job.stat.toUpperCase()}`,'neg');return;}
   const mult=1+(sv-job.min)*0.05;
-  const pay=Math.round((job.base+Math.random()*job.variance)*mult);
+  const dayBonus = Math.floor(state.day * 1.5);
+  const pay=Math.round((job.base+dayBonus+Math.random()*job.variance)*mult);
   state.cash+=pay;state.hp-=job.hp;
   log(`Worked as ${job.name}: +${cash(pay)} (${job.hp} HP)`,'pos');
   if(state.hp<=0){state.hp=0;log('You collapsed from exhaustion.','neg');}
@@ -299,12 +300,12 @@ function rest(){
 }
 function fight(){
   if(state.lastFightDay===state.day){toast('You already fought today','warn');return;}
-  const eStr=5+Math.floor(state.day*.7)+Math.floor(Math.random()*6);
+  const eStr=5+Math.floor(state.day*.35)+Math.floor(Math.random()*6);
   const myR=state.stats.str+Math.floor(Math.random()*8);
   const thR=eStr+Math.floor(Math.random()*8);
   state.lastFightDay=state.day;
   if(myR>thR){
-    const rw=30+eStr*8+Math.floor(Math.random()*40);
+    const rw=80+eStr*20+Math.floor(Math.random()*80);
     state.cash+=rw;state.hp=Math.max(0,state.hp-Math.floor(eStr*.6));
     log(`Beat a thug (str ${eStr}): +${cash(rw)}`,'pos');
   }else if(myR===thR){
